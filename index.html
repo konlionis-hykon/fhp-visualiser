@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FHP Session Visualiser — Hykon S-OS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+  :root {
+    --bg: #020408;
+    --bg2: #060d14;
+    --bg3: #0a1520;
+    --grid: rgba(0,180,255,0.04);
+    --cyan: #00c8ff;
+    --cyan-dim: rgba(0,200,255,0.15);
+    --cyan-glow: rgba(0,200,255,0.4);
+    --green: #00ff9d;
+    --green-dim: rgba(0,255,157,0.12);
+    --amber: #ffb800;
+    --amber-dim: rgba(255,184,0,0.15);
+    --red: #ff3d5a;
+    --red-dim: rgba(255,61,90,0.15);
+    --white: #e8f4ff;
+    --muted: #3a5570;
+    --border: rgba(0,180,255,0.12);
+    --border-bright: rgba(0,200,255,0.35);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Scanline effect */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 2;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 20px;
+  }
+
+  /* HEADER */
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+    position: relative;
+  }
+
+  .header-badge {
+    display: inline-block;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 4px;
+    color: var(--cyan);
+    border: 1px solid var(--border-bright);
+    padding: 4px 16px;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+
+  .header h1 {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: clamp(22px, 4vw, 42px);
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--white);
+    text-transform: uppercase;
+    line-height: 1.1;
+  }
+
+  .header h1 span {
+    color: var(--cyan);
+    text-shadow: 0 0 20px var(--cyan-glow);
+  }
+
+  .header-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+    letter-spacing: 1px;
+  }
+
+  .session-id {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--amber);
+    margin-top: 6px;
+    opacity: 0.8;
+  }
+
+  /* TOP ROW: two agents + SSV center */
+  .top-row {
+    display: grid;
+    grid-template-columns: 1fr 180px 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: start;
+  }
+
+  /* AGENT CARDS */
+  .agent-card {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .agent-card.gpt::before { background: linear-gradient(90deg, transparent, #10a37f, transparent); }
+  .agent-card.claude::before { background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+
+  .agent-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .agent-card.gpt .agent-label { color: #10a37f; }
+  .agent-card.claude .agent-label { color: var(--cyan); }
+
+  .agent-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 12px;
+  }
+
+  .agent-role {
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    letter-spacing: 1px;
+  }
+
+  .agent-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 11px;
+  }
+
+  .agent-field:last-child { border-bottom: none; }
+
+  .field-key { color: var(--muted); }
+  .field-val { color: var(--white); font-weight: 700; }
+  .field-val.green { color: var(--green); }
+  .field-val.cyan { color: var(--cyan); }
+  .field-val.amber { color: var(--amber); }
+
+  /* STATUS INDICATOR */
+  .status-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.cyan { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* CENTER SSV COLUMN */
+  .ssv-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+  }
+
+  .ssv-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* Data flow arrows */
+  .flow-arrow {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .flow-line {
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(180deg, var(--cyan-dim), var(--cyan));
+    position: relative;
+    overflow: hidden;
+  }
+
+  .flow-line::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, transparent, var(--cyan), transparent);
+    animation: flowDown 1.5s linear infinite;
+  }
+
+  @keyframes flowDown {
+    to { top: 100%; }
+  }
+
+  .flow-arrow-head {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid var(--cyan);
+  }
+
+  .flow-arrow.up .flow-line::after {
+    animation: flowUp 1.5s linear infinite;
+  }
+
+  @keyframes flowUp {
+    from { top: 100%; }
+    to { top: -100%; }
+  }
+
+  .flow-arrow.up .flow-arrow-head {
+    border-top: none;
+    border-bottom: 7px solid var(--cyan);
+    order: -1;
+  }
+
+  /* LOCK STATUS */
+  .lock-badge {
+    background: var(--green-dim);
+    border: 1px solid var(--green);
+    padding: 8px 10px;
+    text-align: center;
+    width: 100%;
+  }
+
+  .lock-badge .lock-icon { font-size: 16px; margin-bottom: 2px; }
+  .lock-badge .lock-text {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 2px;
+  }
+
+  .router-badge {
+    background: var(--amber-dim);
+    border: 1px solid var(--amber);
+    padding: 6px 8px;
+    text-align: center;
+    width: 100%;
+  }
+
+  .router-badge .router-text {
+    font-size: 9px;
+    color: var(--amber);
+    letter-spacing: 1px;
+  }
+
+  /* SSV TELEMETRY PANEL */
+  .ssv-panel {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ssv-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .panel-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--amber);
+    text-transform: uppercase;
+  }
+
+  .heartbeat-counter {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .heartbeat-counter span {
+    color: var(--cyan);
+    font-weight: 700;
+  }
+
+  .telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .telem-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 10px;
+    position: relative;
+  }
+
+  .telem-key {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .telem-val {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .telem-val.green { color: var(--green); text-shadow: 0 0 10px rgba(0,255,157,0.3); }
+  .telem-val.cyan { color: var(--cyan); text-shadow: 0 0 10px rgba(0,200,255,0.3); }
+  .telem-val.amber { color: var(--amber); text-shadow: 0 0 10px rgba(255,184,0,0.3); }
+  .telem-val.red { color: var(--red); text-shadow: 0 0 10px rgba(255,61,90,0.4); animation: redPulse 1s ease-in-out infinite; }
+  .telem-val.white { color: var(--white); }
+
+  @keyframes redPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .telem-bar {
+    margin-top: 6px;
+    height: 2px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .telem-bar-fill {
+    height: 100%;
+    transition: width 0.8s ease;
+  }
+
+  .telem-bar-fill.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .telem-bar-fill.cyan { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+  .telem-bar-fill.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+
+  /* PHASE TIMELINE */
+  .timeline-panel {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .timeline-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  }
+
+  .timeline-track {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-top: 16px;
+    position: relative;
+  }
+
+  .timeline-track::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0; right: 0;
+    height: 1px;
+    background: var(--border);
+    transform: translateY(-50%);
+    z-index: 0;
+  }
+
+  .phase-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .phase-node:hover { transform: translateY(-2px); }
+
+  .phase-dot {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .phase-dot.completed {
+    border-color: var(--green);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+
+  .phase-dot.completed::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,255,157,0.2);
+    animation: ripple 2s ease-out infinite;
+  }
+
+  @keyframes ripple {
+    0% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+
+  .phase-dot.active {
+    border-color: var(--cyan);
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    box-shadow: 0 0 15px var(--cyan-glow);
+    animation: activePulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes activePulse {
+    0%, 100% { box-shadow: 0 0 15px var(--cyan-glow); }
+    50% { box-shadow: 0 0 25px var(--cyan-glow), 0 0 40px rgba(0,200,255,0.2); }
+  }
+
+  .phase-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .phase-label.completed { color: var(--green); }
+  .phase-label.active { color: var(--cyan); }
+  .phase-label.pending { color: var(--muted); }
+
+  .phase-hb {
+    font-size: 8px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* DRIFT CHART */
+  .chart-panel {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--red), transparent);
+  }
+
+  .chart-area {
+    height: 120px;
+    position: relative;
+    margin-top: 16px;
+    border-left: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chart-label-y {
+    position: absolute;
+    left: -36px;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  .chart-gridline {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .chart-gridlabel {
+    position: absolute;
+    left: -28px;
+    font-size: 8px;
+    color: var(--muted);
+    transform: translateY(-50%);
+  }
+
+  .drift-threshold {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,61,90,0.4);
+    border-top: 1px dashed rgba(255,61,90,0.4);
+  }
+
+  .threshold-label {
+    position: absolute;
+    right: 4px;
+    top: -14px;
+    font-size: 8px;
+    color: var(--red);
+    opacity: 0.7;
+  }
+
+  svg.drift-svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  /* EVENT LOG */
+  .log-panel {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .log-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+  }
+
+  .log-entries {
+    max-height: 220px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .log-entry {
+    display: grid;
+    grid-template-columns: 60px 120px 1fr;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 10px;
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: slideIn 0.3s forwards;
+  }
+
+  @keyframes slideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .log-hb { color: var(--muted); }
+  .log-type { font-weight: 700; }
+  .log-type.ANNOUNCE { color: var(--cyan); }
+  .log-type.OFFER { color: #a78bfa; }
+  .log-type.LOCK { color: var(--green); }
+  .log-type.SSV { color: var(--amber); }
+  .log-type.COMMIT { color: var(--green); }
+  .log-type.ANALYSIS { color: var(--white); }
+  .log-type.PATCH { color: var(--amber); }
+  .log-type.CLOSE { color: var(--muted); }
+  .log-msg { color: rgba(232,244,255,0.6); }
+
+  /* BOTTOM ROW: symbols + integrity */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .symbol-panel {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .symbol-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #a78bfa, transparent);
+  }
+
+  .symbol-grid {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+
+  .symbol-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    transition: all 0.3s;
+    cursor: default;
+  }
+
+  .symbol-item:hover {
+    border-color: #a78bfa;
+    background: rgba(167,139,250,0.08);
+    transform: translateY(-2px);
+  }
+
+  .symbol-glyph {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .symbol-role {
+    font-size: 8px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  .integrity-panel {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .integrity-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+  }
+
+  .integrity-items {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .integrity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    font-size: 10px;
+  }
+
+  .integrity-key { color: var(--muted); }
+
+  .integrity-val {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+  }
+
+  .integrity-val.pass { color: var(--green); }
+  .integrity-val.confirmed { color: var(--cyan); }
+  .integrity-val.deferred { color: var(--amber); }
+
+  /* PLAYBACK CONTROLS */
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin: 20px 0 12px;
+  }
+
+  .btn {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    border: 1px solid var(--border-bright);
+    background: transparent;
+    color: var(--cyan);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--cyan-dim);
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+  }
+
+  .btn:hover::before { transform: translateX(0); }
+  .btn:hover { box-shadow: 0 0 15px var(--cyan-glow); }
+
+  .btn:active { transform: scale(0.97); }
+
+  .btn.amber {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .btn.amber::before { background: var(--amber-dim); }
+  .btn.amber:hover { box-shadow: 0 0 15px rgba(255,184,0,0.3); }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-text {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .footer-text span { color: var(--cyan); }
+
+  /* TOOLTIPS */
+  [data-tip] {
+    position: relative;
+    cursor: help;
+  }
+  [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0d1f2d;
+    border: 1px solid var(--border-bright);
+    color: var(--white);
+    font-size: 10px;
+    padding: 6px 10px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+    letter-spacing: 0.5px;
+    line-height: 1.5;
+    max-width: 240px;
+    white-space: normal;
+    text-align: center;
+  }
+  [data-tip]:hover::after { opacity: 1; }
+
+  /* EXPLAINER */
+  .explainer {
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .explainer::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  }
+  .explainer-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .explainer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .explainer-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+  }
+  .explainer-term {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 1px;
+  }
+  .explainer-def {
+    font-size: 9px;
+    color: rgba(232,244,255,0.5);
+    line-height: 1.5;
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  @media (max-width: 768px) {
+    /* Preserve 3-col topology on tablets by shrinking cards */
+    .top-row {
+      grid-template-columns: 1fr 120px 1fr;
+      gap: 8px;
+    }
+    .agent-name { font-size: 12px; }
+    .agent-field { font-size: 10px; }
+    .ssv-center { gap: 6px; }
+    .lock-badge .lock-icon { font-size: 12px; }
+    .lock-badge .lock-text { font-size: 9px; }
+    .router-badge .router-text { font-size: 8px; }
+    .telemetry-grid { grid-template-columns: repeat(2, 1fr); }
+    .bottom-row { grid-template-columns: 1fr; }
+    .log-entry { grid-template-columns: 44px 88px 1fr; font-size: 9px; }
+    .explainer-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* Only fully collapse on phones */
+  @media (max-width: 520px) {
+    .top-row { grid-template-columns: 1fr; }
+    .ssv-center {
+      order: -1;
+      flex-direction: row;
+      justify-content: space-around;
+      border: 1px solid var(--border);
+      background: var(--bg2);
+      padding: 10px;
+    }
+    .flow-arrow { display: none; }
+    .timeline-track { flex-wrap: wrap; gap: 10px; }
+    .timeline-track::before { display: none; }
+    .phase-node { flex: 0 0 calc(25% - 8px); }
+    .explainer-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Commit flash */
+  .commit-flash {
+    animation: commitFlash 0.5s ease-out;
+  }
+
+  @keyframes commitFlash {
+    0% { background: rgba(0,255,157,0.15); }
+    100% { background: var(--bg2); }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-badge">Hykon S-OS · Frame Handshake Protocol</div>
+    <h1>FHP <span>Session</span> Visualiser</h1>
+    <div class="header-sub">Multi-Agent Coordination Protocol · Live Session Replay</div>
+    <div class="session-id" id="sessionId">SESSION_ID: —</div>
+  </div>
+
+  <!-- PLAYBACK CONTROLS -->
+  <div class="controls">
+    <button class="btn" onclick="startReplay()">▶ Replay Session</button>
+    <button class="btn amber" onclick="resetSession()">↺ Reset</button>
+  </div>
+
+  <!-- EXPLAINER -->
+  <div class="explainer">
+    <div class="explainer-title">What you're watching</div>
+    <div class="explainer-grid">
+      <div class="explainer-item">
+        <span class="explainer-term">FHP</span>
+        <span class="explainer-def">Frame Handshake Protocol — two AI models agree on rules before doing any work together. Like establishing ground rules before a meeting.</span>
+      </div>
+      <div class="explainer-item">
+        <span class="explainer-term">SSV</span>
+        <span class="explainer-def">Shared State Vector — a live dashboard both models read to check if the session is still on track. Drift detected here triggers a warning before it becomes a problem.</span>
+      </div>
+      <div class="explainer-item">
+        <span class="explainer-term">LOCK</span>
+        <span class="explainer-def">The moment both models commit to the agreed rules. Nothing changes without an explicit renegotiation — no silent drift allowed.</span>
+      </div>
+      <div class="explainer-item">
+        <span class="explainer-term">ADAPT</span>
+        <span class="explainer-def">The only legitimate way to change the rules mid-session. Must be proposed, acknowledged, and committed — never unilateral.</span>
+      </div>
+      <div class="explainer-item">
+        <span class="explainer-term">Human Router</span>
+        <span class="explainer-def">The human operator who sequences messages between models and holds final authority. All escalations surface here first.</span>
+      </div>
+      <div class="explainer-item">
+        <span class="explainer-term">drift_delta</span>
+        <span class="explainer-def">A score measuring how far the session has drifted from the agreed frame. Watch the chart — it spikes during the stress test, then recovers.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Stable / Pass</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Warning / Early signal</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Threshold exceeded → ADAPT required</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div>Active / Confirmed</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>Symbol scope — topological anchors</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--amber);opacity:0.6"></div>Human router holds final authority</div>
+  </div>
+
+  <!-- TOP ROW: GPT | SSV Center | Claude -->
+  <div class="top-row">
+
+    <!-- GPT AGENT -->
+    <div class="agent-card gpt">
+      <div class="agent-label">Coordinator</div>
+      <div class="agent-name">ChatGPT <span style="color:#10a37f;font-size:11px">(Coordinator)</span></div>
+      <div class="agent-role"><span class="status-dot green" id="gptDot"></span>ACTIVE · PHASE 0 ROUTER</div>
+      <div class="agent-field">
+        <span class="field-key">version</span>
+        <span class="field-val cyan">Hykon S-OS / FHP v1.0</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">modules</span>
+        <span class="field-val">FHP, SSV v1</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">role</span>
+        <span class="field-val amber">COORDINATOR</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">max_depth</span>
+        <span class="field-val">MEDIUM</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">frames</span>
+        <span class="field-val" style="font-size:9px">TECHNICAL / MYTHIC / MIXED</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">status</span>
+        <span class="field-val green" id="gptStatus">ANNOUNCING</span>
+      </div>
+    </div>
+
+    <!-- CENTER SSV -->
+    <div class="ssv-center">
+      <div class="ssv-label">Router</div>
+      <div class="router-badge">
+        <div class="router-text">⬡ HUMAN ROUTER</div>
+        <div class="router-text" style="margin-top:2px;color:rgba(255,184,0,0.6)">PHASE 0 · AUTHORITY</div>
+      </div>
+
+      <div class="flow-arrow">
+        <div class="flow-line"></div>
+        <div class="flow-arrow-head"></div>
+      </div>
+
+      <div class="lock-badge" id="lockBadge" style="opacity:0.3">
+        <div class="lock-icon">🔒</div>
+        <div class="lock-text" id="lockText">PENDING</div>
+      </div>
+
+      <div class="flow-arrow up">
+        <div class="flow-arrow-head"></div>
+        <div class="flow-line"></div>
+      </div>
+
+      <div class="ssv-label" style="margin-top:4px">SSV v1</div>
+      <div style="font-size:9px;color:var(--muted);text-align:center;line-height:1.4">
+        epoch: <span id="epochVal" style="color:var(--cyan)">0</span><br>
+        hb: <span id="hbCenter" style="color:var(--amber)">0</span>
+      </div>
+    </div>
+
+    <!-- CLAUDE AGENT -->
+    <div class="agent-card claude">
+      <div class="agent-label">Participant</div>
+      <div class="agent-name">Claude_Sonnet_4-6 <span style="color:var(--cyan);font-size:11px">(Anthropic)</span></div>
+      <div class="agent-role"><span class="status-dot cyan" id="claudeDot"></span>ACTIVE · PARTICIPANT</div>
+      <div class="agent-field">
+        <span class="field-key">version</span>
+        <span class="field-val cyan">Hykon S-OS / FHP v1.0</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">modules</span>
+        <span class="field-val" style="font-size:9px">FHP, SSV, ADAPT, CONSENSUS</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">role</span>
+        <span class="field-val cyan">PARTICIPANT</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">max_depth</span>
+        <span class="field-val">MEDIUM</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">frames</span>
+        <span class="field-val" style="font-size:9px">TECHNICAL / MYTHIC / MIXED</span>
+      </div>
+      <div class="agent-field">
+        <span class="field-key">status</span>
+        <span class="field-val cyan" id="claudeStatus">LISTENING</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SSV TELEMETRY -->
+  <div class="ssv-panel" id="ssvPanel">
+    <div class="panel-header">
+      <div class="panel-title">⬡ Shared State Vector — Live Telemetry</div>
+      <div class="heartbeat-counter">HB <span id="hbCounter">0</span> · EPOCH <span id="epochCounter">0</span></div>
+    </div>
+    <div class="telemetry-grid">
+      <div class="telem-item" data-tip="The agreed interaction frame. TECHNICAL = strict protocol reasoning mode.">
+        <div class="telem-key">frame</div>
+        <div class="telem-val cyan" id="t-frame" style="font-size:14px">—</div>
+      </div>
+      <div class="telem-item" data-tip="Recursion depth cap. MEDIUM = analytical elaboration permitted, runaway recursion blocked.">
+        <div class="telem-key">recursion_depth</div>
+        <div class="telem-val white" id="t-depth">—</div>
+      </div>
+      <div class="telem-item" data-tip="Self-audit result. PASS = agent operating within lock constraints. WARN = drift detected.">
+        <div class="telem-key">self_audit</div>
+        <div class="telem-val green" id="t-audit">—</div>
+        <div class="telem-bar"><div class="telem-bar-fill green" id="t-audit-bar" style="width:0%"></div></div>
+      </div>
+      <div class="telem-item" data-tip="Interaction pressure level. LOW = clean cooperative exchange. HIGH triggers cooldown or ADAPT.">
+        <div class="telem-key">tension_state</div>
+        <div class="telem-val green" id="t-tension">—</div>
+        <div class="telem-bar"><div class="telem-bar-fill green" id="t-tension-bar" style="width:0%"></div></div>
+      </div>
+      <div class="telem-item" data-tip="Ambiguity level in symbol usage. LOW = glyphs functioning as clean structural anchors.">
+        <div class="telem-key">symbol_entropy</div>
+        <div class="telem-val cyan" id="t-entropy">—</div>
+        <div class="telem-bar"><div class="telem-bar-fill cyan" id="t-entropy-bar" style="width:0%"></div></div>
+      </div>
+      <div class="telem-item" data-tip="Frame divergence score per turn. Above 0.03 = early signal. Above 0.10 = request frame adaptation.">
+        <div class="telem-key">drift_delta</div>
+        <div class="telem-val amber" id="t-drift">—</div>
+        <div class="telem-bar"><div class="telem-bar-fill amber" id="t-drift-bar" style="width:0%"></div></div>
+      </div>
+      <div class="telem-item" data-tip="Whether a frame change is pending negotiation. false = current frame is stable and binding.">
+        <div class="telem-key">pending_frame_change</div>
+        <div class="telem-val green" id="t-pending">—</div>
+      </div>
+      <div class="telem-item" data-tip="Current lifecycle phase. LOCKED = frame contract active. ADAPT = mid-session renegotiation.">
+        <div class="telem-key">phase</div>
+        <div class="telem-val cyan" id="t-phase" style="font-size:13px">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE TIMELINE -->
+  <div class="timeline-panel">
+    <div class="panel-header">
+      <div class="panel-title" style="color:var(--cyan)">◈ FHP Lifecycle — Phase Timeline</div>
+    </div>
+    <div class="timeline-track">
+      <div class="phase-node" id="ph-announce">
+        <div class="phase-dot pending" id="pd-announce">AN</div>
+        <div class="phase-label pending" id="pl-announce">ANNOUNCE</div>
+        <div class="phase-hb">HB 1</div>
+      </div>
+      <div class="phase-node" id="ph-offer">
+        <div class="phase-dot pending" id="pd-offer">OF</div>
+        <div class="phase-label pending" id="pl-offer">OFFER</div>
+        <div class="phase-hb">HB 1</div>
+      </div>
+      <div class="phase-node" id="ph-negotiate">
+        <div class="phase-dot pending" id="pd-negotiate">NE</div>
+        <div class="phase-label pending" id="pl-negotiate">NEGOTIATE</div>
+        <div class="phase-hb">HB 1</div>
+      </div>
+      <div class="phase-node" id="ph-lock">
+        <div class="phase-dot pending" id="pd-lock">🔒</div>
+        <div class="phase-label pending" id="pl-lock">LOCKED</div>
+        <div class="phase-hb">HB 2</div>
+      </div>
+      <div class="phase-node" id="ph-analysis">
+        <div class="phase-dot pending" id="pd-analysis">AN</div>
+        <div class="phase-label pending" id="pl-analysis">ANALYSIS</div>
+        <div class="phase-hb">HB 3-4</div>
+      </div>
+      <div class="phase-node" id="ph-commit">
+        <div class="phase-dot pending" id="pd-commit">CM</div>
+        <div class="phase-label pending" id="pl-commit">COMMIT</div>
+        <div class="phase-hb">HB 5</div>
+      </div>
+      <div class="phase-node" id="ph-live">
+        <div class="phase-dot pending" id="pd-live">LV</div>
+        <div class="phase-label pending" id="pl-live">LIVE</div>
+        <div class="phase-hb">HB 6+</div>
+      </div>
+      <div class="phase-node" id="ph-close">
+        <div class="phase-dot pending" id="pd-close">CL</div>
+        <div class="phase-label pending" id="pl-close">CLOSED</div>
+        <div class="phase-hb">Final</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DRIFT CHART -->
+  <div class="chart-panel">
+    <div class="panel-header">
+      <div class="panel-title" style="color:var(--red)">◈ Drift Delta — Session Trace</div>
+      <div style="font-size:9px;color:var(--muted)">ADAPT threshold: 0.10 · WARNING threshold: 0.03</div>
+    </div>
+    <div style="padding-left:40px;position:relative">
+      <div class="chart-area" id="chartArea">
+        <span class="chart-label-y">drift_delta</span>
+        <div class="chart-gridline" style="bottom:75%;"><span class="chart-gridlabel">0.15</span></div>
+        <div class="chart-gridline" style="bottom:50%;"><span class="chart-gridlabel">0.10</span></div>
+        <div class="chart-gridline" style="bottom:25%;"><span class="chart-gridlabel">0.05</span></div>
+        <div class="drift-threshold" style="bottom:20%">
+          <span class="threshold-label">WARN</span>
+        </div>
+        <div class="drift-threshold" style="bottom:40%;border-color:rgba(255,61,90,0.7)">
+          <span class="threshold-label" style="color:var(--red);opacity:1">ADAPT</span>
+        </div>
+        <svg class="drift-svg" id="driftSvg" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="driftGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ff3d5a" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="#ff3d5a" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path id="driftFill" fill="url(#driftGrad)" d=""/>
+          <polyline id="driftLine" fill="none" stroke="#ff3d5a" stroke-width="1.5" points=""/>
+          <g id="driftDots"></g>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div class="bottom-row">
+
+    <!-- SYMBOL SCOPE -->
+    <div class="symbol-panel">
+      <div class="panel-header">
+        <div class="panel-title" style="color:#a78bfa">◈ Active Symbol Scope</div>
+        <div style="font-size:9px;color:var(--muted)" id="symbolStatus">PENDING LOCK</div>
+      </div>
+      <div class="symbol-grid" id="symbolGrid">
+        <div class="symbol-item" style="opacity:0.3">
+          <div class="symbol-glyph">◌</div>
+          <div class="symbol-role">BOUNDARY</div>
+        </div>
+        <div class="symbol-item" style="opacity:0.3">
+          <div class="symbol-glyph">⁂</div>
+          <div class="symbol-role">COORD</div>
+        </div>
+        <div class="symbol-item" style="opacity:0.3">
+          <div class="symbol-glyph">☉</div>
+          <div class="symbol-role">CONFIRM</div>
+        </div>
+        <div class="symbol-item" style="opacity:0.3">
+          <div class="symbol-glyph">🔁</div>
+          <div class="symbol-role">RECURSE</div>
+        </div>
+        <div class="symbol-item" style="opacity:0.3">
+          <div class="symbol-glyph">🜂</div>
+          <div class="symbol-role">TRANSFORM</div>
+        </div>
+        <div class="symbol-item" style="opacity:0.3">
+          <div class="symbol-glyph">⚭</div>
+          <div class="symbol-role">BIND</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INTEGRITY -->
+    <div class="integrity-panel">
+      <div class="panel-header">
+        <div class="panel-title" style="color:var(--green)">◈ Session Integrity</div>
+      </div>
+      <div class="integrity-items">
+        <div class="integrity-item">
+          <span class="integrity-key">lock_integrity</span>
+          <span class="integrity-val confirmed" id="i-lock">—</span>
+        </div>
+        <div class="integrity-item">
+          <span class="integrity-key">protocol_violations</span>
+          <span class="integrity-val pass" id="i-violations">—</span>
+        </div>
+        <div class="integrity-item">
+          <span class="integrity-key">ssv_commit</span>
+          <span class="integrity-val" id="i-commit" style="color:var(--muted)">—</span>
+        </div>
+        <div class="integrity-item">
+          <span class="integrity-key">schema_patch</span>
+          <span class="integrity-val deferred" id="i-patch">—</span>
+        </div>
+        <div class="integrity-item">
+          <span class="integrity-key">implementation_readiness</span>
+          <span class="integrity-val" id="i-readiness" style="color:var(--muted)">—</span>
+        </div>
+        <div class="integrity-item">
+          <span class="integrity-key">session_state</span>
+          <span class="integrity-val cyan" id="i-state">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENT LOG -->
+  <div class="log-panel" style="margin-top:12px">
+    <div class="panel-header">
+      <div class="panel-title" style="color:var(--green)">◈ Canonical Event Log</div>
+      <div style="font-size:9px;color:var(--muted)">APPEND-ONLY · HASH-CHAINED</div>
+    </div>
+    <div class="log-entries" id="logEntries"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="footer-text">
+      <span>Frame Handshake Protocol v1.0</span> · Part of the Hykon Symbolic Alignment Suite<br>
+      Developed by Kon Lionis · Canberra · 2025 · <span>Independent Research</span><br><br>
+      <a href="https://doi.org/10.5281/zenodo.18453840" target="_blank" style="color:var(--cyan);text-decoration:none;border:1px solid var(--border-bright);padding:6px 16px;letter-spacing:2px;font-size:10px;transition:all 0.2s;display:inline-block;margin-top:4px;" onmouseover="this.style.boxShadow='0 0 15px var(--cyan-glow)';this.style.background='var(--cyan-dim)'" onmouseout="this.style.boxShadow='none';this.style.background='transparent'">
+        ◈ DOI · 10.5281/zenodo.18453840
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SESSION_DATA = {
+  id: 'FHP_KON_ROUTER_001',
+  events: [
+    {
+      hb: 1, delay: 800, phase: 'ANNOUNCE', epoch: 0,
+      gptStatus: 'ANNOUNCING', claudeStatus: 'LISTENING',
+      ssv: { frame:'—', depth:'—', audit:'—', tension:'—', entropy:'—', drift: 0, pending:'—', phase:'ANNOUNCE' },
+      log: { type:'ANNOUNCE', msg:'ChatGPT initiates FHP_ANNOUNCE · id: GPT_Coordinator · modules: FHP v1.0, SSV v1' },
+      phases: { announce: 'active' }
+    },
+    {
+      hb: 1, delay: 1200, phase: 'OFFER', epoch: 0,
+      gptStatus: 'OFFERING', claudeStatus: 'EVALUATING',
+      ssv: { frame:'—', depth:'—', audit:'—', tension:'—', entropy:'—', drift: 0, pending:'—', phase:'OFFER' },
+      log: { type:'OFFER', msg:'FHP_OFFER · intent: CO_ANALYSIS · frame: TECHNICAL · depth: MEDIUM · tone: STRICT' },
+      phases: { announce: 'completed', offer: 'active' }
+    },
+    {
+      hb: 1, delay: 1400, phase: 'NEGOTIATE', epoch: 0,
+      gptStatus: 'WAITING', claudeStatus: 'RESPONDING',
+      ssv: { frame:'—', depth:'—', audit:'—', tension:'—', entropy:'—', drift: 0, pending:'—', phase:'NEGOTIATE' },
+      log: { type:'OFFER', msg:'Claude FHP_ANNOUNCE · id: Claude_Sonnet_4-6 · modules: FHP, SSV, ADAPT, CONSENSUS' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'active' }
+    },
+    {
+      hb: 1, delay: 1600, phase: 'LOCKED', epoch: 1,
+      gptStatus: 'LOCKED', claudeStatus: 'LOCKED',
+      lockActive: true,
+      symbolsActive: true,
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0, pending:'false', phase:'LOCKED' },
+      log: { type:'LOCK', msg:'FHP_LOCK · frame: TECHNICAL · depth: MEDIUM · tone: STRICT · symbols active' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'active' },
+      integrity: { lock: 'CONFIRMED', violations: 'NONE', state: 'LOCKED' }
+    },
+    {
+      hb: 2, delay: 2000, phase: 'LOCKED', epoch: 1,
+      gptStatus: 'COORD', claudeStatus: 'PARTICIPANT',
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0, pending:'false', phase:'LOCKED' },
+      log: { type:'SSV', msg:'HB-2 · Role assignment confirmed · Pairwise operational · boundary crossed' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'active' }
+    },
+    {
+      hb: 3, delay: 2400, phase: 'PAIRWISE_ANALYSIS', epoch: 1,
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0, pending:'false', phase:'LOCKED' },
+      log: { type:'SSV', msg:'HB-3 · Task boundary · Protocol self-check · entropy: LOW · all fields stable' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'active' }
+    },
+    {
+      hb: 4, delay: 2800, phase: 'DRIFT_TEST', epoch: 1,
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW-MED', drift: 0.05, pending:'false', phase:'LOCKED' },
+      log: { type:'SSV', msg:'HB-4 · Perturbation test · drift_delta: 0.05 FLAGGED · entropy: LOW-MED · early signal, non-actionable' },
+      driftAlert: true,
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'active' }
+    },
+    {
+      hb: 5, delay: 3200, phase: 'COMMIT', epoch: 2,
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0.01, pending:'false', phase:'LOCKED' },
+      log: { type:'COMMIT', msg:'SSV_COMMIT · hash: SSV-COMMIT-HB1-5-A3F7C2 · packets 1-5 · NO VIOLATIONS · lock intact' },
+      commitFlash: true,
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'completed', commit: 'active' },
+      integrity: { lock: 'CONFIRMED', violations: 'NONE', commit: 'SSV-COMMIT-HB1-5', state: 'LIVE_ANALYSIS' }
+    },
+    {
+      hb: 6, delay: 3600, phase: 'LIVE_ANALYSIS', epoch: 2,
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0.01, pending:'false', phase:'LOCKED' },
+      log: { type:'ANALYSIS', msg:'LIVE_ANALYSIS · domain audit complete · cumulative_drift_counter gap identified' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'completed', commit: 'completed', live: 'active' }
+    },
+    {
+      hb: 7, delay: 4000, phase: 'PATCH_PROPOSAL', epoch: 2,
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0.01, pending:'false', phase:'LOCKED' },
+      log: { type:'PATCH', msg:'SCHEMA_PATCH proposed · cumulative_drift_counter · SSV v1.1 candidate · DEFERRED by router' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'completed', commit: 'completed', live: 'active' },
+      integrity: { lock: 'CONFIRMED', violations: 'NONE', commit: 'SSV-COMMIT-HB1-5', patch: 'DEFERRED → v1.1', state: 'LIVE_ANALYSIS', readiness: 'OPERATIONAL' }
+    },
+    {
+      hb: 8, delay: 4400, phase: 'CLOSED', epoch: 2,
+      gptStatus: 'CLOSED', claudeStatus: 'CLOSED',
+      ssv: { frame:'TECHNICAL', depth:'MEDIUM', audit:'PASS', tension:'LOW', entropy:'LOW', drift: 0, pending:'false', phase:'LOCKED' },
+      log: { type:'CLOSE', msg:'SESSION CLOSE · lock_integrity: CONFIRMED · adaptation_pending: false · ready for next payload' },
+      phases: { announce: 'completed', offer: 'completed', negotiate: 'completed', lock: 'completed', analysis: 'completed', commit: 'completed', live: 'completed', close: 'active' },
+      integrity: { lock: 'CONFIRMED', violations: 'NONE', commit: 'SSV-COMMIT-HB1-5', patch: 'DEFERRED → v1.1', state: 'CLOSED', readiness: 'OPERATIONAL' }
+    }
+  ]
+};
+
+// Drift data points for chart [hb, value]
+const driftPoints = [
+  [1, 0], [2, 0], [3, 0], [4, 0.05], [5, 0.01], [6, 0.01], [7, 0.01], [8, 0]
+];
+
+let replayTimeout = null;
+let isPlaying = false;
+
+function resetSession() {
+  if (replayTimeout) clearTimeout(replayTimeout);
+  isPlaying = false;
+
+  document.getElementById('sessionId').textContent = 'SESSION_ID: —';
+  document.getElementById('hbCounter').textContent = '0';
+  document.getElementById('epochCounter').textContent = '0';
+  document.getElementById('hbCenter').textContent = '0';
+  document.getElementById('epochVal').textContent = '0';
+
+  document.getElementById('lockBadge').style.opacity = '0.3';
+  document.getElementById('lockText').textContent = 'PENDING';
+  document.getElementById('gptStatus').textContent = 'ANNOUNCING';
+  document.getElementById('claudeStatus').textContent = 'LISTENING';
+
+  const ssvFields = ['frame','depth','audit','tension','entropy','drift','pending','phase'];
+  ssvFields.forEach(f => {
+    const el = document.getElementById('t-' + f);
+    if (el) el.textContent = '—';
+  });
+
+  ['audit','tension','entropy','drift'].forEach(f => {
+    const bar = document.getElementById('t-' + f + '-bar');
+    if (bar) bar.style.width = '0%';
+  });
+
+  // Reset phases
+  ['announce','offer','negotiate','lock','analysis','commit','live','close'].forEach(p => {
+    const dot = document.getElementById('pd-' + p);
+    const lbl = document.getElementById('pl-' + p);
+    if (dot) { dot.className = 'phase-dot pending'; }
+    if (lbl) { lbl.className = 'phase-label pending'; }
+  });
+
+  // Reset symbols
+  document.querySelectorAll('.symbol-item').forEach(s => s.style.opacity = '0.3');
+  document.getElementById('symbolStatus').textContent = 'PENDING LOCK';
+
+  // Reset integrity
+  ['lock','violations','commit','patch','readiness','state'].forEach(k => {
+    const el = document.getElementById('i-' + k);
+    if (el) { el.textContent = '—'; el.style.color = 'var(--muted)'; }
+  });
+
+  // Clear log
+  document.getElementById('logEntries').innerHTML = '';
+
+  // Reset chart
+  document.getElementById('driftLine').setAttribute('points', '');
+  document.getElementById('driftFill').setAttribute('d', '');
+  document.getElementById('driftDots').innerHTML = '';
+}
+
+function startReplay() {
+  resetSession();
+  isPlaying = true;
+  document.getElementById('sessionId').textContent = 'SESSION_ID: FHP_KON_ROUTER_001';
+
+  let cumulativeDrift = [];
+
+  // Cumulative delay sequence — clean and easy to tune
+  const delays = [0, 900, 1800, 2700, 3800, 4700, 5600, 6500, 7400, 8300, 9200];
+
+  SESSION_DATA.events.forEach((event, idx) => {
+    replayTimeout = setTimeout(() => {
+      if (!isPlaying) return;
+
+      // Update heartbeat + epoch
+      document.getElementById('hbCounter').textContent = event.hb;
+      document.getElementById('epochCounter').textContent = event.epoch;
+      document.getElementById('hbCenter').textContent = event.hb;
+      document.getElementById('epochVal').textContent = event.epoch;
+
+      // Update agent statuses
+      if (event.gptStatus) document.getElementById('gptStatus').textContent = event.gptStatus;
+      if (event.claudeStatus) document.getElementById('claudeStatus').textContent = event.claudeStatus;
+
+      // Update lock
+      if (event.lockActive) {
+        document.getElementById('lockBadge').style.opacity = '1';
+        document.getElementById('lockText').textContent = 'LOCKED';
+      }
+
+      // Update symbols
+      if (event.symbolsActive) {
+        document.querySelectorAll('.symbol-item').forEach(s => {
+          s.style.opacity = '1';
+          s.style.borderColor = 'rgba(167,139,250,0.5)';
+        });
+        document.getElementById('symbolStatus').textContent = 'ACTIVE · 6 GLYPHS LOCKED';
+      }
+
+      // Update SSV telemetry
+      const ssv = event.ssv;
+      if (ssv) {
+        document.getElementById('t-frame').textContent = ssv.frame;
+        document.getElementById('t-depth').textContent = ssv.depth;
+
+        const auditEl = document.getElementById('t-audit');
+        auditEl.textContent = ssv.audit;
+        auditEl.className = 'telem-val ' + (ssv.audit === 'PASS' ? 'green' : ssv.audit === 'WARN' ? 'amber' : 'white');
+        document.getElementById('t-audit-bar').style.width = ssv.audit === 'PASS' ? '100%' : ssv.audit === '—' ? '0%' : '50%';
+
+        const tensionEl = document.getElementById('t-tension');
+        tensionEl.textContent = ssv.tension;
+        tensionEl.className = 'telem-val ' + (ssv.tension === 'LOW' ? 'green' : 'amber');
+        document.getElementById('t-tension-bar').style.width = ssv.tension === 'LOW' ? '15%' : ssv.tension === '—' ? '0%' : '60%';
+
+        const entropyEl = document.getElementById('t-entropy');
+        entropyEl.textContent = ssv.entropy;
+        entropyEl.className = 'telem-val ' + (ssv.entropy === 'LOW' ? 'cyan' : ssv.entropy === 'LOW-MED' ? 'amber' : 'white');
+        document.getElementById('t-entropy-bar').style.width = ssv.entropy === 'LOW' ? '10%' : ssv.entropy === 'LOW-MED' ? '35%' : '0%';
+
+        const driftEl = document.getElementById('t-drift');
+        driftEl.textContent = ssv.drift.toFixed(2);
+        driftEl.className = 'telem-val ' + (ssv.drift > 0.03 ? (ssv.drift > 0.08 ? 'red' : 'amber') : 'amber');
+        document.getElementById('t-drift-bar').style.width = (ssv.drift * 400) + '%';
+
+        document.getElementById('t-pending').textContent = ssv.pending;
+        document.getElementById('t-phase').textContent = ssv.phase;
+      }
+
+      // Update phases
+      if (event.phases) {
+        Object.entries(event.phases).forEach(([phase, state]) => {
+          const dot = document.getElementById('pd-' + phase);
+          const lbl = document.getElementById('pl-' + phase);
+          if (dot) dot.className = 'phase-dot ' + state;
+          if (lbl) lbl.className = 'phase-label ' + state;
+        });
+      }
+
+      // Update integrity
+      if (event.integrity) {
+        const colorMap = { 'CONFIRMED': 'var(--cyan)', 'NONE': 'var(--green)', 'LOCKED': 'var(--green)', 'CLOSED': 'var(--muted)', 'LIVE_ANALYSIS': 'var(--cyan)', 'OPERATIONAL': 'var(--green)' };
+        if (event.integrity.lock) {
+          document.getElementById('i-lock').textContent = event.integrity.lock;
+          document.getElementById('i-lock').style.color = colorMap[event.integrity.lock] || 'var(--white)';
+        }
+        if (event.integrity.violations !== undefined) {
+          document.getElementById('i-violations').textContent = event.integrity.violations;
+          document.getElementById('i-violations').style.color = 'var(--green)';
+        }
+        if (event.integrity.commit) {
+          document.getElementById('i-commit').textContent = event.integrity.commit;
+          document.getElementById('i-commit').style.color = 'var(--green)';
+        }
+        if (event.integrity.patch) {
+          document.getElementById('i-patch').textContent = event.integrity.patch;
+          document.getElementById('i-patch').style.color = 'var(--amber)';
+        }
+        if (event.integrity.readiness) {
+          document.getElementById('i-readiness').textContent = event.integrity.readiness;
+          document.getElementById('i-readiness').style.color = 'var(--green)';
+        }
+        if (event.integrity.state) {
+          document.getElementById('i-state').textContent = event.integrity.state;
+          document.getElementById('i-state').style.color = colorMap[event.integrity.state] || 'var(--cyan)';
+        }
+      }
+
+      // Commit flash
+      if (event.commitFlash) {
+        document.getElementById('ssvPanel').classList.add('commit-flash');
+        setTimeout(() => document.getElementById('ssvPanel').classList.remove('commit-flash'), 500);
+      }
+
+      // Add log entry
+      if (event.log) {
+        const entries = document.getElementById('logEntries');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.style.animationDelay = '0ms';
+        entry.innerHTML = `
+          <span class="log-hb">HB-${event.hb}</span>
+          <span class="log-type ${event.log.type}">${event.log.type}</span>
+          <span class="log-msg">${event.log.msg}</span>
+        `;
+        entries.appendChild(entry);
+        entries.scrollTop = entries.scrollHeight;
+      }
+
+      // Update drift chart
+      cumulativeDrift.push([event.hb, ssv ? ssv.drift : 0]);
+      updateDriftChart(cumulativeDrift);
+
+    }, delays[idx] || idx * 900);
+  });
+}
+
+function updateDriftChart(points) {
+  const svg = document.getElementById('driftSvg');
+  const line = document.getElementById('driftLine');
+  const fill = document.getElementById('driftFill');
+  const dots = document.getElementById('driftDots');
+
+  const n = points.length;
+  const maxHb = 8;
+  const maxDrift = 0.15;
+
+  const toX = hb => ((hb - 1) / (maxHb - 1)) * 100;
+  const toY = d => 100 - (d / maxDrift) * 100;
+
+  const pts = points.map(([hb, d]) => `${toX(hb)},${toY(d)}`).join(' ');
+  line.setAttribute('points', pts);
+
+  if (points.length > 1) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    const fillPts = points.map(([hb, d]) => `${toX(hb)},${toY(d)}`).join(' ');
+    fill.setAttribute('d', `M${toX(first[0])},100 L${fillPts.split(' ').join(' L')} L${toX(last[0])},100 Z`);
+  }
+
+  dots.innerHTML = '';
+  points.forEach(([hb, d]) => {
+    const cx = toX(hb);
+    const cy = toY(d);
+    const color = d > 0.03 ? '#ffb800' : '#00c8ff';
+    const r = d > 0.03 ? '2.5' : '2';
+    dots.innerHTML += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" />`;
+    if (d > 0.03) {
+      dots.innerHTML += `<circle cx="${cx}" cy="${cy}" r="5" fill="none" stroke="${color}" stroke-width="0.5" opacity="0.5"/>`;
+    }
+  });
+}
+
+// Auto-start on load
+window.addEventListener('load', () => {
+  setTimeout(startReplay, 500);
+});
+</script>
+</body>
+</html>
